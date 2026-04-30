@@ -35,6 +35,7 @@ import pyarrow.csv as pv
 import pyarrow.parquet as pq
 import yaml
 from web3 import Web3
+from web3.middleware import geth_poa_middleware
 
 logging.basicConfig(
     level=logging.INFO,
@@ -223,6 +224,10 @@ class BSCExporter:
         self.rpc_url = config["rpc_url"]
         self.w3 = Web3(Web3.HTTPProvider(
             self.rpc_url, request_kwargs={"timeout": 30}))
+        # BSC's Parlia (PoA) consensus puts validator signatures in extraData,
+        # exceeding the 32-byte limit web3.py enforces by default. Inject the
+        # geth-style PoA middleware to bypass that validation.
+        self.w3.middleware_onion.inject(geth_poa_middleware, layer=0)
         if not self.w3.is_connected():
             raise ConnectionError(f"Cannot connect to RPC: {self.rpc_url}")
         log.info("Connected to BSC node, chain_id=%d", self.w3.eth.chain_id)
