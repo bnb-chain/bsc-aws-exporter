@@ -1,6 +1,13 @@
 ethereum-etl>=2.4.0
-pyarrow>=14.0.0
+pyarrow>=14.0.0,<19.0.0   # cap to a range with cp310/cp311 manylinux wheels (19+ went sdist-only on some Pythons)
 boto3>=1.34.0
 pyyaml>=6.0
-web3>=5.31,<6.0      # ethereum-etl 2.x depends on web3 v5 API
-setuptools<70        # ethereum-etl 2.x uses pkg_resources removed in setuptools>=70
+web3>=5.31,<6.0           # ethereum-etl 2.x depends on web3 v5 API
+setuptools<70             # ethereum-etl 2.x uses pkg_resources removed in setuptools>=70
+
+# NOTE: on Python 3.11+, after `pip install -r requirements.txt`, run:
+#   pip install --no-deps 'parsimonious>=0.10.4'
+# eth-abi 2.x (pulled in by web3 v5) pins parsimonious <0.9, but those versions
+# call inspect.getargspec which was removed in Python 3.11. The --no-deps
+# override is required because pip resolver would otherwise refuse the conflict.
+# Not needed on Python 3.10.
