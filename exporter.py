@@ -251,10 +251,25 @@ class BSCExporter:
         if s3_options:
             boto_config_args["s3"] = s3_options
         boto_config = BotoConfig(**boto_config_args)
+
+        # Optional inline credentials (handy for R2 / other S3-compatible
+        # services where you don't want to mess with ~/.aws/). If absent,
+        # boto3 falls back to the standard chain (env vars, ~/.aws/, IAM role).
+        ak = s3_cfg.get("access_key_id")
+        sk = s3_cfg.get("secret_access_key")
+        if bool(ak) != bool(sk):
+            raise SystemExit(
+                "config.yaml: access_key_id and secret_access_key must be set together")
+        creds = {}
+        if ak and sk:
+            creds["aws_access_key_id"] = ak
+            creds["aws_secret_access_key"] = sk
+
         self.s3 = boto3.client(
             "s3", region_name=s3_cfg.get("region", "us-east-2"),
             endpoint_url=s3_cfg.get("endpoint_url"),
-            config=boto_config)
+            config=boto_config,
+            **creds)
         self.s3_transfer = TransferConfig(
             multipart_threshold=64 * 1024 * 1024,
             multipart_chunksize=64 * 1024 * 1024,

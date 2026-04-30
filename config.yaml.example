@@ -3,15 +3,27 @@
 # Recommended: use your own full node for backfill
 rpc_url: "https://bsc-dataseed.bnbchain.org"
 
-# AWS S3 configuration
+# Object storage configuration. Works with AWS S3 or any S3-compatible service
+# (Cloudflare R2, Backblaze B2, MinIO, etc.).
 s3:
-  bucket: "aws-public-blockchain"
+  bucket: "your-bucket-name"
   prefix: "v1.1/bnb"
   region: "us-east-2"
-  # Optional: S3-compatible endpoint, for example Cloudflare R2.
+
+  # ── For Cloudflare R2 / other S3-compatible endpoints ───────────────
   # endpoint_url: "https://<account-id>.r2.cloudflarestorage.com"
-  # Optional: usually "path" for S3-compatible endpoints, "virtual" for AWS S3.
+  # region: "auto"
   # addressing_style: "path"
+
+  # ── Optional inline credentials ─────────────────────────────────────
+  # If both are set, they override the boto3 default credential chain
+  # (env vars / ~/.aws/credentials / EC2 IAM role). Useful for R2 where
+  # you don't have an IAM role to fall back on. Leave commented out and
+  # boto3 picks credentials up from env / config files / IAM as usual.
+  #
+  # SECURITY: keep config.yaml chmod 600 and out of git (.gitignore covers it).
+  # access_key_id:     "YOUR_ACCESS_KEY_ID"
+  # secret_access_key: "YOUR_SECRET_ACCESS_KEY"
 
 # Export settings
 export:
