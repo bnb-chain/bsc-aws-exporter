@@ -230,10 +230,26 @@ class BSCExporter:
         s3_cfg = config["s3"]
         self.bucket = s3_cfg["bucket"]
         self.prefix = s3_cfg.get("prefix", "v1.1/bnb")
+        s3_options = {}
+        if "addressing_style" in s3_cfg:
+            s3_options["addressing_style"] = s3_cfg["addressing_style"]
+        if s3_cfg.get("endpoint_url"):
+            # Custom S3-compatible endpoints such as Cloudflare R2 cannot be
+            # combined with S3 Accelerate inherited from the AWS config file.
+            s3_options.setdefault("addressing_style", "path")
+            s3_options["use_accelerate_endpoint"] = False
+
+        boto_config_args = {
+            "max_pool_connections": 10,
+            "retries": {"max_attempts": 3, "mode": "adaptive"},
+        }
+        if s3_options:
+            boto_config_args["s3"] = s3_options
+        boto_config = BotoConfig(**boto_config_args)
         self.s3 = boto3.client(
             "s3", region_name=s3_cfg.get("region", "us-east-2"),
-            config=BotoConfig(max_pool_connections=10,
-                              retries={"max_attempts": 3, "mode": "adaptive"}))
+            endpoint_url=s3_cfg.get("endpoint_url"),
+            config=boto_config)
         self.s3_transfer = TransferConfig(
             multipart_threshold=64 * 1024 * 1024,
             multipart_chunksize=64 * 1024 * 1024,

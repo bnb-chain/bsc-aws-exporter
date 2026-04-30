@@ -8,6 +8,10 @@ s3:
   bucket: "aws-public-blockchain"
   prefix: "v1.1/bnb"
   region: "us-east-2"
+  # Optional: S3-compatible endpoint, for example Cloudflare R2.
+  # endpoint_url: "https://<account-id>.r2.cloudflarestorage.com"
+  # Optional: usually "path" for S3-compatible endpoints, "virtual" for AWS S3.
+  # addressing_style: "path"
 
 # Export settings
 export:
