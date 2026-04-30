@@ -1,0 +1,21 @@
+# BSC node RPC endpoint
+# Public: https://bsc-dataseed.bnbchain.org (has rate limits)
+# Recommended: use your own full node for backfill
+rpc_url: "https://bsc-dataseed.bnbchain.org"
+
+# AWS S3 configuration
+s3:
+  bucket: "aws-public-blockchain"
+  prefix: "v1.1/bnb"
+  region: "us-east-2"
+
+# Export settings
+export:
+  # ethereum-etl batch size (blocks per RPC batch call)
+  ethereumetl_batch_size: 100
+  # ethereum-etl max workers
+  ethereumetl_workers: 5
+  # Parquet row group size
+  row_group_size: 50000
+  # Local working directory for temp files
+  work_dir: "/tmp/bsc-export"

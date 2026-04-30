@@ -1,0 +1,40 @@
+[Unit]
+Description=BSC → AWS Public Blockchain daily export
+Documentation=file:///opt/bsc-exporter/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+
+# Adjust these to match your deployment.
+User=bsc
+Group=bsc
+WorkingDirectory=/opt/bsc-exporter
+
+# Environment for AWS credentials. Prefer IAM role on EC2 — leave these
+# unset and boto3 will pick up the instance profile automatically.
+# Otherwise drop credentials into /etc/bsc-exporter/aws.env (chmod 600)
+# and uncomment:
+# EnvironmentFile=/etc/bsc-exporter/aws.env
+
+# Run the exporter against yesterday's data (default behavior).
+ExecStart=/opt/bsc-exporter/venv/bin/python exporter.py --config /etc/bsc-exporter/config.yaml
+
+# Hardening — safe defaults for a network/disk-bound script.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ReadWritePaths=/var/lib/bsc-exporter /var/log/bsc-exporter
+
+# Logs go to journald — view with `journalctl -u bsc-exporter`.
+StandardOutput=journal
+StandardError=journal
+
+# A single export run can take 30+ min on slow RPCs; give it room.
+TimeoutStartSec=2h
+
+[Install]
+WantedBy=multi-user.target

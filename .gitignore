@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.Python
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# venv
+venv/
+.venv/
+env/
+
+# Local config (only the example is checked in)
+config.yaml
+*.local.yaml
+
+# Local work / state — created at runtime
+work/
+*.parquet
+*.csv
+progress.txt
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store

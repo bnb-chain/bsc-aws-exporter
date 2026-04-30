@@ -1,0 +1,21 @@
+[Unit]
+Description=Run BSC exporter daily at 01:00 UTC
+Documentation=file:///opt/bsc-exporter/README.md
+
+[Timer]
+# Daily at 01:00 UTC — 1 hour past midnight gives the BSC node time to
+# settle on the last blocks of the previous UTC day.
+OnCalendar=*-*-* 01:00:00 UTC
+
+# Catch up if the machine was off when the timer should have fired.
+Persistent=true
+
+# Spread out across 0–10 min to avoid thundering herd if many nodes
+# share the same RPC endpoint. Remove if running on a dedicated node.
+RandomizedDelaySec=600
+
+# Tie the timer to the unit name (so this fires bsc-exporter.service).
+Unit=bsc-exporter.service
+
+[Install]
+WantedBy=timers.target
