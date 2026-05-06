@@ -329,6 +329,23 @@ class BSCExporter:
         if start is None:
             raise ValueError(f"No blocks found for {date.date()}")
 
+        # Defensive check: cumulative drift between estimate_block (theoretical
+        # 3s/1.5s/750ms/450ms timeline) and reality can exceed ESTIMATE_MARGIN
+        # over multi-year backfills, especially for 2021 Q1 BSC where blocks
+        # averaged ~5s under congestion. If the bisect bottomed out at our
+        # lower bound, the bound itself may have been past the true day-start;
+        # widen the search downward until block[start-1].ts < day_start_ts.
+        while start > 0:
+            prev_ts = self.w3.eth.get_block(start - 1)["timestamp"]
+            if prev_ts < day_start_ts:
+                break
+            log.warning("start_block bound too high (block %d ts=%d >= day_start=%d); widening",
+                        start - 1, prev_ts, day_start_ts)
+            earlier = self._bisect_block(0, start - 1, day_start_ts)
+            if earlier is None or earlier >= start:
+                break
+            start = earlier
+
         # Over-estimate end; ts filter handles precision
         end = min(latest, estimate_block(day_end_ts) + ESTIMATE_MARGIN)
 
@@ -393,11 +410,12 @@ class BSCExporter:
 
     # ── Export one date ──────────────────────────────────────────────
 
-    def export_date(self, date: datetime, dry_run: bool = False):
+    def export_date(self, date: datetime, dry_run: bool = False,
+                    force: bool = False):
         date_str = date.strftime("%Y-%m-%d")
         t0 = time.monotonic()
 
-        if not dry_run:
+        if not dry_run and not force:
             if self.progress.is_done(date_str):
                 log.info("[%s] Already done, skipping.", date_str)
                 return
@@ -446,9 +464,10 @@ class BSCExporter:
 
 # ── Parallel entry point ─────────────────────────────────────────────
 
-def _export_one(config_path: str, date_str: str, dry_run: bool):
+def _export_one(config_path: str, date_str: str, dry_run: bool, force: bool):
     BSCExporter(load_config(config_path), parallel_mode=True).export_date(
-        datetime.strptime(date_str, "%Y-%m-%d"), dry_run=dry_run)
+        datetime.strptime(date_str, "%Y-%m-%d"),
+        dry_run=dry_run, force=force)
     return date_str
 
 
@@ -493,6 +512,8 @@ Examples:
                    help="Parallel workers (default: 1)")
     p.add_argument("--dry-run", action="store_true",
                    help="Export locally only, skip S3")
+    p.add_argument("--force", action="store_true",
+                   help="Re-export and overwrite even if progress.txt or S3 says done")
     args = p.parse_args()
 
     dates = build_date_list(args)
@@ -503,7 +524,8 @@ Examples:
         log.info("Parallel mode: %d workers", args.parallel)
         failed = []
         with ProcessPoolExecutor(max_workers=args.parallel) as pool:
-            futs = {pool.submit(_export_one, config_path, d, args.dry_run): d
+            futs = {pool.submit(_export_one, config_path, d,
+                                args.dry_run, args.force): d
                     for d in dates}
             for fut in as_completed(futs):
                 d = futs[fut]
@@ -521,7 +543,7 @@ Examples:
         exporter = BSCExporter(load_config(config_path))
         for d in dates:
             exporter.export_date(datetime.strptime(d, "%Y-%m-%d"),
-                                 dry_run=args.dry_run)
+                                 dry_run=args.dry_run, force=args.force)
 
     log.info("All done.")
 
