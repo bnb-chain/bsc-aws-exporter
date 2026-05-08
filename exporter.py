@@ -154,35 +154,47 @@ def csv_to_parquet(csv_path: str, parquet_path: str,
                    ts_range: tuple[int, int] | None = None):
     """Convert ethereum-etl CSV to Parquet, aligned with schema.
 
-    Optionally filters rows to `start <= ts_column < end` for exact day boundaries.
+    Streams CSV in RecordBatches (~MB each) so peak memory stays bounded
+    regardless of CSV size — important for high-tx days where the CSV can be
+    multiple GB. Optionally filters rows to `start <= ts_column < end` for
+    exact day boundaries.
     """
     if not os.path.exists(csv_path):
         raise FileNotFoundError(f"CSV not found: {csv_path}")
-    table = pv.read_csv(csv_path, convert_options=convert_opts)
 
-    # Align columns to schema: keep existing, fill missing with null
     target_cols = [f.name for f in schema]
-    for field in schema:
-        if field.name not in table.column_names:
-            table = table.append_column(field.name,
-                                        pa.nulls(len(table), type=field.type))
-    table = table.select(target_cols).cast(schema)
+    reader = pv.open_csv(csv_path, convert_options=convert_opts)
+    csv_cols = set(reader.schema.names)
+    # Columns present in the CSV that we want to keep (in schema order).
+    present_cols = [c for c in target_cols if c in csv_cols]
+    # Columns missing from the CSV — filled with nulls per batch.
+    missing_fields = [f for f in schema if f.name not in csv_cols]
 
-    # Timestamp filter for precise day boundaries
-    if ts_column and ts_range:
-        lo, hi = ts_range
-        mask = pc.and_(pc.greater_equal(table[ts_column], lo),
-                       pc.less(table[ts_column], hi))
-        before = len(table)
-        table = table.filter(mask)
-        if len(table) != before:
-            log.info("Filtered %s: %d → %d rows",
-                     os.path.basename(csv_path), before, len(table))
+    before = kept = 0
+    writer = pq.ParquetWriter(parquet_path, schema, compression="snappy")
+    try:
+        for batch in reader:
+            t = pa.Table.from_batches([batch]).select(present_cols)
+            for f in missing_fields:
+                t = t.append_column(f.name, pa.nulls(len(t), type=f.type))
+            t = t.select(target_cols).cast(schema)
+            before += len(t)
+            if ts_column and ts_range:
+                lo, hi = ts_range
+                t = t.filter(pc.and_(pc.greater_equal(t[ts_column], lo),
+                                     pc.less(t[ts_column], hi)))
+            kept += len(t)
+            if len(t):
+                writer.write_table(t, row_group_size=row_group_size)
+    finally:
+        writer.close()
+        reader.close()
 
-    pq.write_table(table, parquet_path, compression="snappy",
-                    row_group_size=row_group_size)
+    if ts_column and ts_range and before != kept:
+        log.info("Filtered %s: %d → %d rows",
+                 os.path.basename(csv_path), before, kept)
     log.info("Wrote %s (%.2f MB, %d rows)",
-             parquet_path, os.path.getsize(parquet_path) / 1e6, len(table))
+             parquet_path, os.path.getsize(parquet_path) / 1e6, kept)
 
 
 # ── Progress tracker ─────────────────────────────────────────────────
