@@ -358,8 +358,15 @@ class BSCExporter:
                 break
             start = earlier
 
-        # Over-estimate end; ts filter handles precision
-        end = min(latest, estimate_block(day_end_ts) + ESTIMATE_MARGIN)
+        # Derive end relative to verified start, NOT from absolute estimate.
+        # estimate_block walks fork segments from genesis, so its absolute
+        # value carries cumulative drift (e.g., +290k blocks at 2024-06-15
+        # because 2021 Q1 averaged ~5s/block instead of 3s). Using the DELTA
+        # estimate_block(end) - estimate_block(start) cancels that drift —
+        # only intra-day variance remains, which is bounded by ESTIMATE_MARGIN.
+        day_blocks = (estimate_block(day_end_ts)
+                      - estimate_block(day_start_ts))
+        end = min(latest, start + day_blocks + ESTIMATE_MARGIN)
 
         log.info("Date %s: blocks %d..%d (%d blocks)",
                  date.strftime("%Y-%m-%d"), start, end, end - start + 1)
