@@ -240,8 +240,20 @@ class BSCExporter:
         # exceeding the 32-byte limit web3.py enforces by default. Inject the
         # geth-style PoA middleware to bypass that validation.
         self.w3.middleware_onion.inject(geth_poa_middleware, layer=0)
-        if not self.w3.is_connected():
-            raise ConnectionError(f"Cannot connect to RPC: {self.rpc_url}")
+        # Retry is_connected() because the underlying RPC probe is a single
+        # call that can transiently fail under load (especially on public
+        # endpoints like nodereal). Without retry, ~50% of worker spawns
+        # would fail and produce gaps in progress.txt.
+        for attempt in range(5):
+            try:
+                if self.w3.is_connected():
+                    break
+            except Exception as e:
+                log.warning("RPC probe error (attempt %d/5): %s", attempt + 1, e)
+            if attempt < 4:
+                time.sleep(min(2 ** attempt, 10))
+        else:
+            raise ConnectionError(f"Cannot connect to RPC after 5 attempts: {self.rpc_url}")
         log.info("Connected to BSC node, chain_id=%d", self.w3.eth.chain_id)
 
         s3_cfg = config["s3"]
