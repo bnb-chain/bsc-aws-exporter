@@ -163,7 +163,13 @@ def csv_to_parquet(csv_path: str, parquet_path: str,
         raise FileNotFoundError(f"CSV not found: {csv_path}")
 
     target_cols = [f.name for f in schema]
-    reader = pv.open_csv(csv_path, convert_options=convert_opts)
+    # block_size must exceed the largest single CSV row. BSC Fermi-era
+    # transactions can have multi-MB `input` calldata; pyarrow's default
+    # (~1 MB) fails with "straddling object straddles two block boundaries".
+    # 64 MB is comfortably above any realistic single-row size.
+    read_options = pv.ReadOptions(block_size=64 * 1024 * 1024)
+    reader = pv.open_csv(csv_path, read_options=read_options,
+                         convert_options=convert_opts)
     csv_cols = set(reader.schema.names)
     # Columns present in the CSV that we want to keep (in schema order).
     present_cols = [c for c in target_cols if c in csv_cols]
