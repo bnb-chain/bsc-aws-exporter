@@ -3,15 +3,19 @@ Description=Run BSC exporter daily at 01:00 UTC
 Documentation=file:///opt/bsc-exporter/README.md
 
 [Timer]
-# Daily at 01:00 UTC — 1 hour past midnight gives the BSC node time to
-# settle on the last blocks of the previous UTC day.
-OnCalendar=*-*-* 01:00:00 UTC
+# Daily at 01:00 — 1 hour past midnight gives the BSC node time to settle
+# on the last blocks of the previous UTC day. Assumes the host runs in UTC
+# (default on cloud / EC2). The bare "01:00:00 UTC" suffix syntax requires
+# systemd >= 229; older releases (e.g. Amazon Linux 2 / CentOS 7 systemd
+# 219) reject it. Drop the UTC suffix and ensure `timedatectl status` says
+# UTC if you're on an older host.
+OnCalendar=*-*-* 01:00:00
 
 # Catch up if the machine was off when the timer should have fired.
 Persistent=true
 
-# Spread out across 0–10 min to avoid thundering herd if many nodes
-# share the same RPC endpoint. Remove if running on a dedicated node.
+# Spread out across 0–10 min to avoid thundering herd if many nodes share
+# the same RPC endpoint. Comment out on systemd < 229 (doesn't support it).
 RandomizedDelaySec=600
 
 # Tie the timer to the unit name (so this fires bsc-exporter.service).

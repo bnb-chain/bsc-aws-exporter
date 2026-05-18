@@ -18,8 +18,15 @@ WorkingDirectory=/opt/bsc-exporter
 # and uncomment:
 # EnvironmentFile=/etc/bsc-exporter/aws.env
 
-# Run the exporter against yesterday's data (default behavior).
-ExecStart=/opt/bsc-exporter/venv/bin/python exporter.py --config /etc/bsc-exporter/config.yaml
+# Run against the last 7 days so transient failures (RPC blip, node OOM,
+# etc.) get auto-corrected within a week — progress.txt + S3 skip make all
+# already-done dates near-free, so the actual work each day is usually just
+# the new "yesterday". Bash wrapper is needed for $(date) substitution;
+# %%F is systemd's escape for a literal % in ExecStart.
+# Add `--collector.textfile.directory=/var/lib/node_exporter/textfile_collector`
+# to PATH if you wire textfile metrics later.
+Environment=PATH=/opt/bsc-exporter/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/bin/bash -c '/opt/bsc-exporter/venv/bin/python /opt/bsc-exporter/exporter.py --config /etc/bsc-exporter/config.yaml --start "$(date -u -d "7 days ago" +%%F)" --end "$(date -u -d "yesterday" +%%F)"'
 
 # Hardening — safe defaults for a network/disk-bound script.
 NoNewPrivileges=true

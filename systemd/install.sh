@@ -9,6 +9,7 @@ CONFIG_DIR="${CONFIG_DIR:-/etc/bsc-exporter}"
 STATE_DIR="${STATE_DIR:-/var/lib/bsc-exporter}"
 LOG_DIR="${LOG_DIR:-/var/log/bsc-exporter}"
 USER_NAME="${USER_NAME:-bsc}"
+PYTHON="${PYTHON:-python3}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_DIR="$(dirname "$SCRIPT_DIR")"
 
@@ -16,6 +17,25 @@ if [[ $EUID -ne 0 ]]; then
     echo "Must run as root (sudo)." >&2
     exit 1
 fi
+
+# Verify Python >= 3.10 (3.6/3.7 on RHEL 7 don't have pyarrow wheels;
+# 3.11+ needs a parsimonious workaround but is supported).
+if ! "$PYTHON" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; then
+    PY_VER=$("$PYTHON" -c 'import sys; print(".".join(map(str, sys.version_info[:3])))' 2>/dev/null || echo "unknown")
+    cat >&2 <<EOF
+Need Python 3.10+ (3.10 strongly preferred). Found $PY_VER at $(command -v "$PYTHON" 2>/dev/null || echo "$PYTHON").
+
+Set PYTHON env var, e.g.:
+  sudo PYTHON=/root/.pyenv/versions/3.10.15/bin/python ./systemd/install.sh
+
+If the path is under /root/ (pyenv default), grant traversal first:
+  sudo chmod o+x /root /root/.pyenv /root/.pyenv/versions
+  sudo chmod -R o+rX /root/.pyenv/versions/3.10.15
+EOF
+    exit 1
+fi
+PY_VER=$("$PYTHON" -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
+echo "==> Using Python $PY_VER at $(command -v "$PYTHON")"
 
 # 1. Service user
 if ! id -u "$USER_NAME" >/dev/null 2>&1; then
@@ -35,12 +55,19 @@ install -o "$USER_NAME" -g "$USER_NAME" -m 0644 "$SOURCE_DIR/requirements.txt" "
 
 # 4. Python venv
 if [[ ! -x "$INSTALL_DIR/venv/bin/python" ]]; then
-    echo "==> Creating venv at $INSTALL_DIR/venv"
-    sudo -u "$USER_NAME" python3 -m venv "$INSTALL_DIR/venv"
+    echo "==> Creating venv at $INSTALL_DIR/venv (using $PYTHON)"
+    sudo -u "$USER_NAME" "$PYTHON" -m venv "$INSTALL_DIR/venv"
 fi
 echo "==> Installing dependencies"
 sudo -u "$USER_NAME" "$INSTALL_DIR/venv/bin/pip" install --quiet --upgrade pip
 sudo -u "$USER_NAME" "$INSTALL_DIR/venv/bin/pip" install --quiet -r "$INSTALL_DIR/requirements.txt"
+# Python 3.11+ needs parsimonious >=0.10 (eth-abi 2.x pins <0.9 but old
+# parsimonious uses inspect.getargspec, removed in 3.11). Force-install
+# bypassing the dep pin — see AGENTS.md for context.
+if "$INSTALL_DIR/venv/bin/python" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)'; then
+    echo "==> Python 3.11+: forcing parsimonious>=0.10.4"
+    sudo -u "$USER_NAME" "$INSTALL_DIR/venv/bin/pip" install --quiet --no-deps 'parsimonious>=0.10.4'
+fi
 
 # 5. Config (skip if already present)
 if [[ ! -f "$CONFIG_DIR/config.yaml" ]]; then
